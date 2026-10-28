@@ -1,0 +1,70 @@
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+"""
+body = """
+{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [Unreleased]
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{% if commit.breaking %}**BREAKING:** {% endif %}\
+{{ commit.message | upper_first | trim }}\
+{% endfor %}
+{% endfor %}
+"""
+footer = """
+{% for release in releases -%}
+{% if release.version -%}
+{% if release.previous.version -%}
+[{{ release.version | trim_start_matches(pat="v") }}]: https://github.com/OWNER/REPO/compare/{{ release.previous.version }}...{{ release.version }}
+{% else -%}
+[{{ release.version | trim_start_matches(pat="v") }}]: https://github.com/OWNER/REPO/releases/tag/{{ release.version }}
+{% endif -%}
+{% else -%}
+[unreleased]: https://github.com/OWNER/REPO/compare/{{ release.previous.version }}...HEAD
+{% endif -%}
+{% endfor %}
+"""
+trim = true
+
+[git]
+filter_unconventional = true
+conventional_commits = true
+sort_commits = "oldest"
+tag_pattern = "^v[0-9].*"
+
+commit_preprocessors = [
+  { pattern = '\s*:[a-z0-9_+-]+:\s*$', replace = "" },
+]
+
+commit_parsers = [
+    { message = "^[a-z]+: merge ", skip = true },
+    { message = "^revert", skip = true },
+
+    # Custom types for sections that have no standard conventional-commit type
+    { message = "^feat", group = "<!-- 0 -->Added" },
+    { message = "^(perf|refactor)", group = "<!-- 1 -->Changed" },
+    { message = "^deprecate", group = "<!-- 2 -->Deprecated" },
+    { message = "^remove", group = "<!-- 3 -->Removed" },
+    { message = "^fix", group = "<!-- 4 -->Fixed" },
+    { message = "^sec(urity)?", group = "<!-- 5 -->Security" },
+
+    # Not notable to end users -> left out of the changelog
+    { message = "^(docs|test|style|chore|ci|build)", skip = true },
+]
+
+[bump]
+initial_tag = "0.1.0"
+features_always_bump_minor = true
+breaking_always_bump_major = true
+
