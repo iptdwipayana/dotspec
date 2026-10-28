@@ -1,0 +1,15 @@
+[package]
+name                    = "dotspec-core"
+description             = "parser, checker, and runtime values for .spec files"
+rust-version.workspace  = true
+version.workspace       = true
+edition.workspace       = true
+license.workspace       = true
+readme.workspace        = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+categories.workspace    = true
+keywords.workspace      = true
+publish.workspace       = true

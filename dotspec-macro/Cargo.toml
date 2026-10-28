@@ -1,0 +1,21 @@
+[package]
+name                    = "dotspec-macro"
+description             = "derive macro for .spec file"
+rust-version.workspace  = true
+version.workspace       = true
+edition.workspace       = true
+license.workspace       = true
+readme.workspace        = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+categories.workspace    = true
+keywords.workspace      = true
+publish.workspace       = true
+
+[dependencies]
+dotspec-codegen.workspace = true
+
+[lib]
+proc-macro = true

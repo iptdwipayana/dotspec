@@ -1,0 +1,18 @@
+[package]
+name                    = "dotspec-codegen"
+description             = "code generation shared by the macro and build helpers for .spec file"
+rust-version.workspace  = true
+version.workspace       = true
+edition.workspace       = true
+license.workspace       = true
+readme.workspace        = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+categories.workspace    = true
+keywords.workspace      = true
+publish.workspace       = true
+
+[dependencies]
+dotspec-core.workspace = true
