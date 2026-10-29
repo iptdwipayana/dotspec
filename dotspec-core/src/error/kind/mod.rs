@@ -13,13 +13,13 @@ pub use traits::ErrorDescription;
 pub use traits::ErrorInfo;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ErrorKind {
+pub enum Kind {
     Io(IoError),
     Semantic(SemanticError),
     Syntax(SyntaxError),
 }
 
-impl ErrorCode for ErrorKind {
+impl ErrorCode for Kind {
     fn code(&self) -> &'static str {
         match self {
             Self::Io(e) => e.code(),
@@ -29,7 +29,7 @@ impl ErrorCode for ErrorKind {
     }
 }
 
-impl ErrorDescription for ErrorKind {
+impl ErrorDescription for Kind {
     fn message(&self) -> Cow<'static, str> {
         match self {
             Self::Io(e) => e.message(),
@@ -55,17 +55,17 @@ impl ErrorDescription for ErrorKind {
     }
 }
 
-impl From<IoError> for ErrorKind {
+impl From<IoError> for Kind {
     fn from(value: IoError) -> Self {
         Self::Io(value)
     }
 }
-impl From<SemanticError> for ErrorKind {
+impl From<SemanticError> for Kind {
     fn from(value: SemanticError) -> Self {
         Self::Semantic(value)
     }
 }
-impl From<SyntaxError> for ErrorKind {
+impl From<SyntaxError> for Kind {
     fn from(value: SyntaxError) -> Self {
         Self::Syntax(value)
     }
@@ -77,17 +77,17 @@ mod tests {
 
     #[test]
     fn error_kinds_delegates_to_inner_error() {
-        let kind: ErrorKind = IoError::FileNotFound.into();
+        let kind: Kind = IoError::FileNotFound.into();
         assert_eq!(kind.code(), "IO001");
-        let kind: ErrorKind = SemanticError::DuplicatePath { path: String::from("foo") }.into();
+        let kind: Kind = SemanticError::DuplicatePath { path: String::from("foo") }.into();
         assert_eq!(kind.code(), "SEM001");
-        let kind: ErrorKind = SyntaxError::UnclosedSection.into();
+        let kind: Kind = SyntaxError::UnclosedSection.into();
         assert_eq!(kind.code(), "SYN001");
     }
 
     #[test]
     fn some_error_kinds_has_label() {
-        let kinds: Vec<ErrorKind> = vec![
+        let kinds: Vec<Kind> = vec![
             SemanticError::DuplicatePath { path: String::from("foo") }.into(),
             SyntaxError::UnclosedSection.into(),
         ];
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn some_error_kinds_has_no_label() {
-        let kinds: Vec<ErrorKind> = vec![
+        let kinds: Vec<Kind> = vec![
             IoError::FileNotFound.into(),
         ];
         for kind in kinds {
