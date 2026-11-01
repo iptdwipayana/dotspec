@@ -11,3 +11,4 @@ pub use error::SyntaxError;
 pub use error::ErrorCode;
 pub use error::ErrorDescription;
 pub use error::ErrorInfo;
+pub use error::Render;
