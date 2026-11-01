@@ -1,7 +1,9 @@
+use std::fmt;
 use std::path::Path;
 use std::path::PathBuf;
-use super::Excerpt;
-use super::Kind;
+use super::excerpt::Excerpt;
+use super::kind::Kind;
+use super::render::Render;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagnostic {
@@ -28,7 +30,19 @@ impl Diagnostic {
     pub fn kind(&self) -> &Kind { &self.kind }
     pub fn excerpt(&self) -> Option<&Excerpt> { self.excerpt.as_ref() }
     pub fn path(&self) -> Option<&Path> { self.path.as_deref() }
+
+    pub fn render(&self) -> Render<'_> {
+        Render::new(self)
+    }
 }
+
+impl fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.render(), f)
+    }
+}
+
+impl std::error::Error for Diagnostic {}
 
 #[cfg(test)]
 mod tests {
@@ -107,5 +121,18 @@ mod tests {
             .with_excerpt(Excerpt::new("[x", Span::new_point(1, 3)))
             .with_excerpt(Excerpt::new("[y", Span::new_point(2, 4)));
         assert_eq!(d.excerpt().unwrap().span(), Span::new_point(2, 4));
+    }
+
+    #[test]
+    fn render_works() {
+        let d = Diagnostic::new(SyntaxError::UnclosedSection) 
+            .with_path("path/to/file.spec")
+            .with_excerpt(Excerpt::new("[x", Span::new_point(10, 10)));
+        assert_eq!(d.to_string(), d.render().to_string());
+    }
+
+    #[test]
+    fn diagnostic_works_as_dynamic_std_error_object() {
+        fn __(_: &dyn std::error::Error) {} __(&Diagnostic::new(SyntaxError::UnclosedSection));
     }
 }
