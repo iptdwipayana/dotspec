@@ -1,4 +1,5 @@
 mod error;
+#[allow(dead_code, unused_imports)] mod lexer;
 #[allow(dead_code, unused_imports)] mod source;
 mod span;
 
