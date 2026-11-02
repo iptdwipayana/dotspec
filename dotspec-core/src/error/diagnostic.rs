@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use super::excerpt::Excerpt;
 use super::kind::Kind;
 use super::render::Render;
+use super::report::Report;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagnostic {
@@ -33,6 +34,10 @@ impl Diagnostic {
 
     pub fn render(&self) -> Render<'_> {
         Render::new(self)
+    }
+
+    pub fn report(&self) -> Report<'_> {
+        Report::new(self)
     }
 }
 
@@ -127,8 +132,21 @@ mod tests {
     fn render_works() {
         let d = Diagnostic::new(SyntaxError::UnclosedSection) 
             .with_path("path/to/file.spec")
-            .with_excerpt(Excerpt::new("[x", Span::new_point(10, 10)));
+            .with_excerpt(Excerpt::new("[x", Span::new_point(1, 3)));
         assert_eq!(d.to_string(), d.render().to_string());
+    }
+
+    #[test]
+    fn report_works() {
+        let d = Diagnostic::new(SyntaxError::UnclosedSection) 
+            .with_path("path/to/file.spec")
+            .with_excerpt(Excerpt::new("[x", Span::new_point(1, 3)));
+        let d_text = d.report().to_string();
+        assert!(d_text.starts_with("error["));
+        assert!(d_text.contains(" --> path/to/file.spec"));
+        assert!(d_text.contains("1 | [x"));
+        assert!(d_text.contains("  |   ^ expect a closing `]` on section header"));
+        assert!(d_text.contains("  = help: valid section header is `[key.subkey]`"));
     }
 
     #[test]
