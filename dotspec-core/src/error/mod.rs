@@ -2,6 +2,7 @@ mod diagnostic;
 mod excerpt;
 mod kind;
 mod render;
+mod report;
 
 pub use diagnostic::Diagnostic;
 pub use excerpt::Excerpt;
@@ -13,3 +14,4 @@ pub use kind::ErrorCode;
 pub use kind::ErrorDescription;
 pub use kind::ErrorInfo;
 pub use render::Render;
+pub use report::Report;
