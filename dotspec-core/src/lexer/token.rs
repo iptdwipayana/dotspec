@@ -9,6 +9,8 @@ pub enum TokenKind {
     Colon,
     Comma,
     Dot,
+    Integer,
+    Float,
     Identifier,
     Whitespace,
     Newline,
@@ -40,6 +42,13 @@ mod tests {
         assert_eq!(token.kind, TokenKind::Identifier);
         assert_eq!(token.span, Span::new(1, 1, 3));
         assert_eq!(token.text, "abc");
+    }
+
+    #[test]
+    fn integer_and_float_are_different_kinds() {
+        let integer = Token::new(TokenKind::Integer, Span::new(1, 1, 1), "1");
+        let float = Token::new(TokenKind::Float, Span::new(1, 1, 3), "1.0");
+        assert_ne!(integer.kind, float.kind);
     }
 
     #[test]

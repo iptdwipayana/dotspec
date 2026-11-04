@@ -18,6 +18,10 @@ impl<'a> Cursor<'a> {
         self.text[self.offset..].chars().next()
     }
 
+    pub fn peek_at(&self, n: usize) -> Option<char> {
+        self.text[self.offset..].chars().nth(n)
+    }
+
     pub fn bump(&mut self) -> Option<char> {
         let c = self.peek()?; self.offset += c.len_utf8();
         match c {
@@ -60,6 +64,33 @@ mod tests {
         let cursor = Cursor::new("abc");
         assert_eq!(position(&cursor), (1, 1));
         assert_eq!(cursor.offset(), 0);
+    }
+
+    #[test]
+    fn peek_at_looks_ahead_without_moving() {
+        let cursor = Cursor::new("abc");
+        assert_eq!(cursor.peek_at(0), Some('a'));
+        assert_eq!(cursor.peek_at(2), Some('c'));
+        assert_eq!(position(&cursor), (1, 1));
+        assert_eq!(cursor.offset(), 0);
+    }
+
+    #[test]
+    fn peek_at_past_the_end_gives_none() {
+        assert_eq!(Cursor::new("ab").peek_at(2), None);
+    }
+
+    #[test]
+    fn peek_at_counts_characters_not_bytes() {
+        assert_eq!(Cursor::new("éa").peek_at(1), Some('a'));
+    }
+
+    #[test]
+    fn peek_at_follows_the_cursor() {
+        let mut cursor = Cursor::new("abc");
+        cursor.bump();
+        assert_eq!(cursor.peek_at(0), Some('b'));
+        assert_eq!(cursor.peek_at(1), Some('c'));
     }
 
     #[test]
