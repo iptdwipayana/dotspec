@@ -1,39 +1,44 @@
 use crate::error::Diagnostic;
+use crate::source::Source;
 use crate::span::Span;
 use super::cursor::Cursor;
+use super::error::Error;
 use super::token::Token;
 use super::token::TokenKind;
 
+use super::number;
+
 pub struct Lexer<'a> {
     cursor: Cursor<'a>,
+    text: &'a str,
     finished: bool,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(text: &'a str) -> Self {
-        Self { cursor: Cursor::new(text), finished: false }
+        Self { cursor: Cursor::new(text), text, finished: false }
     }
 
-    fn token(&mut self) -> Token<'a> {
+    fn token(&mut self) -> Result<Token<'a>, Error> {
         let offset = self.cursor.offset();
         let line = self.cursor.line();
         let column = self.cursor.column();
 
         let kind = match self.cursor.peek() {
-            Some(c) => self.consume(c),
+            Some(c) => self.consume(c)?,
             None => TokenKind::Eof,
         };
 
         let text = self.cursor.slice(offset);
-        Token::new(
+        Ok(Token::new(
             kind,
             Span::new(line, column, text.chars().count()),
             text,
-        )
+        ))
     }
 
-    fn consume(&mut self, c: char) -> TokenKind {
-        match c {
+    fn consume(&mut self, c: char) -> Result<TokenKind, Error> {
+        let kind = match c {
             '[' => self.single(TokenKind::LeftBracket),
             ']' => self.single(TokenKind::RightBracket),
             '{' => self.single(TokenKind::LeftBrace),
@@ -41,6 +46,12 @@ impl<'a> Lexer<'a> {
             ':' => self.single(TokenKind::Colon),
             ',' => self.single(TokenKind::Comma),
             '.' => self.single(TokenKind::Dot),
+            '-' => return number::lex(&mut self.cursor),
+            '+' if number::is_digit(self.cursor.peek_at(1)) => return Err(Error::new(
+                crate::error::SyntaxError::MalformedNumber,
+                Span::new(self.cursor.line(), self.cursor.column(), 1),
+            )),
+            c if c.is_ascii_digit() => return number::lex(&mut self.cursor),
             ' ' | '\t' => {
                 self.cursor.take_while(is_inline_space);
                 TokenKind::Whitespace
@@ -61,12 +72,21 @@ impl<'a> Lexer<'a> {
                 TokenKind::Identifier
             },
             _ => self.single(TokenKind::Unknown),
-        }
+        };
+        Ok(kind)
     }
 
     fn single(&mut self, kind: TokenKind) -> TokenKind {
         self.cursor.bump();
         kind
+    }
+
+    fn diagnostic(&self, failure: Error) -> Diagnostic {
+        let diagnostic = Diagnostic::new(failure.kind);
+        match Source::new(self.text).excerpt(failure.span) {
+            Some(excerpt) => diagnostic.with_excerpt(excerpt),
+            None => diagnostic,
+        }
     }
 }
 
@@ -77,12 +97,16 @@ impl<'a> Iterator for Lexer<'a> {
         if self.finished {
             return None;
         }
-
-        let token = self.token();
-        if token.kind == TokenKind::Eof { 
-            self.finished = true;
+        match self.token() {
+            Ok(token) => {
+                self.finished = token.kind == TokenKind::Eof;
+                Some(Ok(token))
+            },
+            Err(failure) => {
+                self.finished = true;
+                Some(Err(self.diagnostic(failure)))
+            }
         }
-        Some(Ok(token))
     }
 }
 
@@ -122,14 +146,19 @@ mod tests {
 
     #[test]
     fn lexes_a_dotted_path_with_a_dash() {
+        match Lexer::new("123.abc: _").collect::<Result<Vec<_>, _>>() {
+            Ok(tokens) => {dbg!(tokens);},
+            Err(diagnostic) => {println!("{}", diagnostic.report());},
+        }
+
         assert_eq!(kinds("a.b-c"), [Identifier, Dot, Identifier, Eof]);
         assert_eq!(texts("a.b-c"), ["a", ".", "b-c", ""]);
     }
 
     #[test]
-    fn a_digit_does_not_start_an_identifier() {
+    fn a_digit_starts_a_number_not_an_identifier() {
         let tokens = lex("1abc");
-        assert_eq!((tokens[0].kind, tokens[0].text), (Unknown, "1"));
+        assert_eq!((tokens[0].kind, tokens[0].text), (Integer, "1"));
         assert_eq!((tokens[1].kind, tokens[1].text), (Identifier, "abc"));
     }
 
@@ -201,7 +230,6 @@ mod tests {
     #[test]
     fn unknown_characters_become_unknown_tokens() {
         assert_eq!(kinds("@"), [Unknown, Eof]);
-        assert_eq!(kinds("-"), [Unknown, Eof]); // numbers arrive in MVP 5
     }
 
     #[test]
