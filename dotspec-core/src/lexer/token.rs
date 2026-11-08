@@ -1,7 +1,7 @@
 use crate::span::Span;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TokenKind {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TokenKind<'a> {
     LeftBracket,
     RightBracket,
     LeftBrace,
@@ -11,6 +11,7 @@ pub enum TokenKind {
     Dot,
     Integer,
     Float,
+    String { fragments: Vec<super::string::Fragment<'a>> }, 
     Identifier,
     Whitespace,
     Newline,
@@ -19,15 +20,21 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+impl TokenKind<'_> {
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::String { .. })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Token<'a> {
-    pub kind: TokenKind,
+    pub kind: TokenKind<'a>,
     pub span: Span,
     pub text: &'a str,
 }
 
 impl<'a> Token<'a> {
-    pub fn new(kind: TokenKind, span: Span, text: &'a str) -> Self {
+    pub fn new(kind: TokenKind<'a>, span: Span, text: &'a str) -> Self {
         Self { kind, span, text }
     }
 }
@@ -52,9 +59,46 @@ mod tests {
     }
 
     #[test]
-    fn is_copy() {
-        let a = Token::new(TokenKind::Dot, Span::new(1, 1, 1), ".");
-        let b = a;
-        assert_eq!(a, b);
+    fn a_string_kind_keeps_its_fragments() {
+        use super::super::interpolation::Interpolation;
+        use super::super::string::Fragment;
+
+        let fragments = vec![
+            Fragment::Escape('\n', Span::new(1, 2, 2)),
+            Fragment::Text(std::borrow::Cow::Borrowed("abc"), Span::new(1, 3, 3)),
+            Fragment::Interpolation(
+                Interpolation::Env {
+                    path: "foo",
+                    default: Some("bar"),
+                },
+                Span::new(1, 4, 4)
+            )
+        ];
+
+        let token = Token::new(
+            TokenKind::String { fragments: fragments.clone() }, 
+            Span::new(1, 1, 5),
+            "\"\\nabc#{env.FOO}\""
+        );
+
+        assert!(token.kind.is_string());
+        assert_eq!(token.kind, TokenKind::String { fragments: fragments.clone() });
+    }
+
+    #[test]
+    fn every_string_kind_reports_its_span_from_their_fragments() {
+        use super::super::interpolation::Interpolation;
+        use super::super::string::Fragment;
+
+        let span = Span::new(2, 3, 4);
+        assert_eq!(Fragment::Escape('a', span).span(), span);
+        assert_eq!(Fragment::Text(std::borrow::Cow::Borrowed("ab"), span).span(), span);
+        assert_eq!(Fragment::Interpolation(Interpolation::Config { path: "a" }, span).span(), span);
+    }
+
+    #[test]
+    fn only_string_kind_is_a_string() {
+        assert_eq!(TokenKind::Identifier.is_string(), false);
+        assert_eq!(TokenKind::String { fragments: Vec::new() }.is_string(), true);
     }
 }

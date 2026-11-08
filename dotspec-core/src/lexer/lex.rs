@@ -7,6 +7,7 @@ use super::token::Token;
 use super::token::TokenKind;
 
 use super::number;
+use super::string;
 
 pub struct Lexer<'a> {
     cursor: Cursor<'a>,
@@ -25,8 +26,9 @@ impl<'a> Lexer<'a> {
         let column = self.cursor.column();
 
         let kind = match self.cursor.peek() {
-            Some(c) => self.consume(c)?,
             None => TokenKind::Eof,
+            Some('"') => TokenKind::String { fragments: string::lex(&mut self.cursor)? },
+            Some(c) => self.consume(c)?,
         };
 
         let text = self.cursor.slice(offset);
@@ -37,7 +39,7 @@ impl<'a> Lexer<'a> {
         ))
     }
 
-    fn consume(&mut self, c: char) -> Result<TokenKind, Error> {
+    fn consume(&mut self, c: char) -> Result<TokenKind<'static>, Error> {
         let kind = match c {
             '[' => self.single(TokenKind::LeftBracket),
             ']' => self.single(TokenKind::RightBracket),
@@ -76,7 +78,7 @@ impl<'a> Lexer<'a> {
         Ok(kind)
     }
 
-    fn single(&mut self, kind: TokenKind) -> TokenKind {
+    fn single(&mut self, kind: TokenKind<'static>) -> TokenKind<'static> {
         self.cursor.bump();
         kind
     }
@@ -136,8 +138,8 @@ mod tests {
             .expect("lexer should never fail for the current phase")
     }
 
-    fn kinds(text: &str) -> Vec<TokenKind> {
-        lex(text).iter().map(|t| t.kind).collect()
+    fn kinds(text: &str) -> Vec<TokenKind<'_>> {
+        lex(text).into_iter().map(|t| t.kind).collect()
     }
 
     fn texts(text: &str) -> Vec<&str> {
@@ -158,8 +160,8 @@ mod tests {
     #[test]
     fn a_digit_starts_a_number_not_an_identifier() {
         let tokens = lex("1abc");
-        assert_eq!((tokens[0].kind, tokens[0].text), (Integer, "1"));
-        assert_eq!((tokens[1].kind, tokens[1].text), (Identifier, "abc"));
+        assert_eq!((&tokens[0].kind, tokens[0].text), (&Integer, "1"));
+        assert_eq!((&tokens[1].kind, tokens[1].text), (&Identifier, "abc"));
     }
 
     #[test]

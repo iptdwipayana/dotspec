@@ -15,7 +15,7 @@ impl<'a> Cursor<'a> {
     pub fn column(&self) -> usize { self.column }
 
     pub fn peek(&self) -> Option<char> {
-        self.text[self.offset..].chars().next()
+        self.peek_at(0)
     }
 
     pub fn peek_at(&self, n: usize) -> Option<char> {

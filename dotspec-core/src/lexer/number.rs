@@ -8,7 +8,7 @@ pub(super) fn is_digit(c: Option<char>) -> bool {
     c.is_some_and(|c| c.is_ascii_digit())
 }
 
-pub(super) fn lex(cursor: &mut Cursor<'_>) -> Result<TokenKind, Error> {
+pub(super) fn lex(cursor: &mut Cursor<'_>) -> Result<TokenKind<'static>, Error> {
     let offset = cursor.offset();
     let line = cursor.line();
     let column = cursor.column();
@@ -26,24 +26,25 @@ pub(super) fn lex(cursor: &mut Cursor<'_>) -> Result<TokenKind, Error> {
 
     integer(cursor)?;
 
-    let mut kind = TokenKind::Integer;
+    let mut is_float = false;
     if cursor.peek() == Some('.') && is_digit(cursor.peek_at(1)) {
         cursor.bump();
         digits(cursor);
-        kind = TokenKind::Float;
+        is_float = true;
     }
     if matches!(cursor.peek(), Some('e' | 'E')) {
         exponent(cursor, offset, line, column)?;
-        kind = TokenKind::Float;
+        is_float = true;
     }
 
     let text = cursor.slice(offset);
     check_range(
         text,
-        kind,
-        Span::new(line, column, text.chars().count())
+        is_float,
+        Span::new(line, column, text.chars().count()),
     )?;
-    Ok(kind)
+
+    Ok(if is_float { TokenKind::Float } else { TokenKind::Integer })
 }
 
 fn digits(cursor: &mut Cursor<'_>) {
@@ -92,13 +93,19 @@ fn exponent(cursor: &mut Cursor<'_>, offset: usize, line: usize, column: usize) 
     )))
 }
 
-fn check_range(text: &str, kind: TokenKind, span: Span) -> Result<(), Error> {
+fn check_range(text: &str, is_float: bool, span: Span) -> Result<(), Error> {
     let clean: String = text.chars().filter(|&c| c != '_').collect();
 
-    let error = match kind {
-        TokenKind::Integer if clean.parse::<i64>().is_err() => SyntaxError::IntegerOutOfRange,
-        TokenKind::Float if clean.parse::<f64>().is_ok_and(|v| !v.is_finite()) => SyntaxError::FloatOutOfRange,
-        _ => return Ok(()), 
+    let error = if is_float {
+        if !clean.parse::<f64>().is_ok_and(f64::is_infinite) {
+            return Ok(());
+        } 
+        SyntaxError::FloatOutOfRange
+    } else {
+        if clean.parse::<i64>().is_ok() {
+            return Ok(());
+        }
+        SyntaxError::IntegerOutOfRange
     };
     Err(Error::new(error, span))
 }
@@ -110,7 +117,7 @@ mod tests {
     use crate::lexer::Lexer;
     use TokenKind::*;
 
-    fn tokens(text: &str) -> Vec<(TokenKind, &str)> {
+    fn tokens(text: &str) -> Vec<(TokenKind<'_>, &str)> {
         Lexer::new(text)
             .map(|t| t.expect("lexes without any error"))
             .filter(|t| t.kind != Eof)
