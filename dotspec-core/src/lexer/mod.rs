@@ -1,5 +1,6 @@
 mod cursor;
 mod error;
+mod escape;
 mod lex;
 mod number;
 mod token;
