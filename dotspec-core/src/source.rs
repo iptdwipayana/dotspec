@@ -1,4 +1,6 @@
+use super::error::Diagnostic;
 use super::error::Excerpt;
+use super::error::Kind;
 use super::span::Span;
 
 pub struct Source<'a> {
@@ -41,6 +43,14 @@ impl<'a> Source<'a> {
             .copied()
             .unwrap_or(self.source.len());
         Some(self.source[offset_start..offset_end].trim_end_matches(['\r', '\n']))
+    }
+
+    pub fn diagnostic(&self, kind: impl Into<Kind>, span: Span) -> Diagnostic {
+        let diagnostic = Diagnostic::new(kind);
+        match self.excerpt(span) {
+            Some(excerpt) => diagnostic.with_excerpt(excerpt),
+            None => diagnostic,
+        }
     }
 
     pub fn excerpt(&self, span: Span) -> Option<Excerpt> {
@@ -116,5 +126,28 @@ mod tests {
     fn excerpt_of_a_missing_line_is_none() {
         let source = Source::new("a");
         assert!(source.excerpt(Span::new_point(5, 1)).is_none());
+    }
+
+    #[test]
+    fn diagnostic_carries_the_kind_and_the_excerpt() {
+        use super::super::error::SyntaxError;
+
+        let source = Source::new("ok: 1\n[x");
+        let span = Span::new_point(2, 3);
+        let diagnostic = source.diagnostic(SyntaxError::UnclosedSection, span);
+        assert_eq!(diagnostic.kind(), &Kind::Syntax(SyntaxError::UnclosedSection));
+
+        let excerpt = diagnostic.excerpt().expect("has an excerpt");
+        assert_eq!(excerpt.span(), span);
+        assert_eq!(excerpt.snippet(), "[x");
+    }
+
+    #[test]
+    fn diagnostic_without_a_matching_line_has_no_excerpt() {
+        use super::super::error::SyntaxError;
+
+        let source = Source::new("a");
+        let diagnostic = source.diagnostic(SyntaxError::MissingValue, Span::new_point(5, 1));
+        assert!(diagnostic.excerpt().is_none());
     }
 }
