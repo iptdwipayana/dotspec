@@ -84,11 +84,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn diagnostic(&self, failure: Error) -> Diagnostic {
-        let diagnostic = Diagnostic::new(failure.kind);
-        match Source::new(self.text).excerpt(failure.span) {
-            Some(excerpt) => diagnostic.with_excerpt(excerpt),
-            None => diagnostic,
-        }
+        Source::new(self.text).diagnostic(failure.kind, failure.span)
     }
 }
 
