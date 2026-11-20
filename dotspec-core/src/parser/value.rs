@@ -1,15 +1,21 @@
 use std::borrow::Cow;
 
+use super::Parser;
 use crate::ast::Expr;
 use crate::ast::ExprKind;
 use crate::error::Diagnostic;
 use crate::lexer::Token;
 use crate::lexer::TokenKind;
 use crate::span::Span;
-use super::Parser;
 
 impl<'a> Parser<'a> {
     pub(super) fn parse_value(&mut self) -> Result<Expr<'a>, Diagnostic> {
+        match self.stream.peek()?.kind {
+            TokenKind::LeftBracket => return self.parse_array(),
+            TokenKind::LeftBrace => return self.parse_object(),
+            _ => {},
+        }
+
         let Token { kind, text, span } = self.stream.advance()?;
 
         let kind = match kind { 
@@ -51,6 +57,8 @@ mod tests {
     use crate::lexer::Fragment;
 
     use crate::error::SyntaxError;
+
+    use crate::parser::testing::show;
 
     fn value(text: &str) -> Expr<'_> {
         Parser::new(text)
@@ -133,6 +141,12 @@ mod tests {
     }
 
     #[test]
+    fn collections_are_parsed_by_the_same_entry_point() {
+        assert_eq!(show(&value("[1, 2]")), "[1, 2]");
+        assert_eq!(show(&value("{ a: 1 }")), "{a: 1}");
+    }
+
+    #[test]
     fn the_span_covers_the_whole_token() {
         assert_eq!(value("-0.5").span, Span::new(1, 1, 4));
         assert_eq!(value("false").span, Span::new(1, 1, 5));
@@ -156,8 +170,6 @@ mod tests {
             ("True", 4),
             ("FALSE", 5),
             ("truex", 5),
-            ("[", 1),
-            ("{", 1),
             ("]", 1),
             ("}", 1),
             (":", 1),
