@@ -5,43 +5,67 @@ use crate::lexer::Token;
 use crate::lexer::TokenKind;
 use crate::span::Span;
 use super::Parser;
+use super::Spacing;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_entry(&mut self) -> Result<Entry<'a>, Diagnostic> {
-        let key = self.parse_key()?;
-        let colon = self.expect_colon(&key)?;
-
-        self.stream.skip_inline_space()?;
-        if self.value_is_missing()? {
-            return Err(self.error(crate::error::SyntaxError::MissingValue, after(colon.span)));
-        }
-
-        let value = self.parse_value()?;
-        let span = cover(key.span, value.span);
-        Ok(Entry { key, value, span })
+        self.entry(Spacing::Inline, crate::error::SyntaxError::InvalidStatementStart)
     }
 
-    fn parse_key(&mut self) -> Result<Key<'a>, Diagnostic> {
+    pub(crate) fn parse_object_entry(&mut self) -> Result<Entry<'a>, Diagnostic> {
+        self.entry(Spacing::Any, crate::error::SyntaxError::InvalidObjectKey)
+    }
+
+    fn parse_key(&mut self, bad_key: crate::error::SyntaxError) -> Result<Key<'a>, Diagnostic> {
         let token = self.stream.advance()?;
         match token.kind {
             TokenKind::Identifier => Ok(Key { name: token.text, span: token.span }),
-            _ => Err(self.error(crate::error::SyntaxError::InvalidStatementStart, token.span)),
+            _ => Err(self.error(bad_key, token.span)),
         }
     }
 
-    fn expect_colon(&mut self, key: &Key<'a>) -> Result<Token<'a>, Diagnostic> {
-        self.stream.skip_inline_space()?;
+    fn entry(&mut self, spacing: Spacing, bad_key: crate::error::SyntaxError) -> Result<Entry<'a>, Diagnostic> {
+        let before = self.stream.consumed();
+        let key = self.parse_key(bad_key)?;
+        self.expect_colon(spacing)?;
+        self.skip(spacing)?;
+        if self.value_is_missing(spacing)? {
+            return Err(self.error(
+                crate::error::SyntaxError::MissingValue,
+                self.stream.end()
+            ));
+        }
+
+        let value = self.parse_value()?;
+        let span = self.span_since(key.span, before);
+        Ok(Entry {
+            key,
+            value,
+            span,
+        })
+    }
+
+    fn expect_colon(&mut self, spacing: Spacing) -> Result<(), Diagnostic> {
+        self.skip(spacing)?;
         if matches!(self.stream.peek()?.kind, TokenKind::Colon) {
-            return self.stream.advance();
+            self.stream.advance()?;
+            return Ok(());
         }
-        Err(self.error(crate::error::SyntaxError::MissingColon, after(key.span)))
+        Err(self.error(crate::error::SyntaxError::MissingColon, self.stream.end()))
     }
 
-    fn value_is_missing(&mut self) -> Result<bool, Diagnostic> {
-        Ok(matches!(
-            self.stream.peek()?.kind,
-            TokenKind::Newline | TokenKind::Comment | TokenKind::Eof
-        ))
+    fn value_is_missing(&mut self, spacing: Spacing) -> Result<bool, Diagnostic> {
+        let kind = &self.stream.peek()?.kind;
+        Ok(match spacing {
+            Spacing::Inline => matches!(
+                kind,
+                TokenKind::Newline | TokenKind::Comment | TokenKind::Eof
+            ),
+            Spacing::Any => matches!(
+                kind,
+                TokenKind::Comma | TokenKind::RightBrace | TokenKind::Eof
+            ),
+        })
     }
 }
 
@@ -66,8 +90,12 @@ mod tests {
     use crate::ast::ExprKind;
     use crate::error::Kind;
     use crate::lexer::Fragment;
+    use crate::span::Span;
 
     use crate::error::SyntaxError;
+
+    use crate::parser::testing::show;
+    use crate::parser::testing::syntax_error;
 
     fn entry(text: &str) -> Entry<'_> {
         Parser::new(text)
@@ -83,11 +111,7 @@ mod tests {
     }
 
     fn failure(text: &str) -> (SyntaxError, Span) {
-        let diagnostic = diagnostic(text);
-        let Kind::Syntax(error) = diagnostic.kind().clone() else {
-            panic!("expected a syntax error for {text:?}");
-        };
-        (error, diagnostic.excerpt().expect("has an excerpt").span())
+        syntax_error(&diagnostic(text))
     }
 
     #[test]
@@ -147,7 +171,21 @@ mod tests {
         let entry = entry("m: \"\"\"\nabc\n\"\"\"");
         assert_eq!(entry.value.span, Span::new(1, 4, 11));
         assert_eq!(entry.span, Span::new(1, 1, 14));
-        dbg!(entry);
+    }
+
+    #[test]
+    fn collections_are_values() {
+        assert_eq!(show(&entry("key: [1, 2]").value), "[1, 2]");
+        assert_eq!(show(&entry("key: {}").value), "{}");
+        assert_eq!(show(&entry("key: { a: [1] }").value), "{a: [1]}");
+    }
+
+    #[test]
+    fn a_multiline_collection_makes_the_entry_span_every_character() {
+        let text = "ports: [\n  80,\n  443,\n]";
+        let entry = entry(text);
+        assert_eq!(entry.value.span, Span::new(1, 8, text.chars().count() - 7));
+        assert_eq!(entry.span, Span::new(1, 1, text.chars().count()));
     }
 
     #[test]
@@ -185,7 +223,15 @@ mod tests {
 
     #[test]
     fn a_missing_value_points_right_after_the_colon() {
-        for text in ["key:", "key:   ", "key: # c", "key:\n1", "key : ", "key:\r\n1"] {
+        for text in [
+            "key:",
+            "key:   ",
+            "key: # c",
+            "key:\n1",
+            "key : ",
+            "key:\r\n1",
+            "key:\n[1]",
+        ] {
             let column = text.find(':').expect("has a colon") + 2;
             assert_eq!(
                 failure(text),
@@ -196,8 +242,8 @@ mod tests {
     }
 
     #[test]
-    fn collections_and_unknown_words_are_invalid_values_for_now() {
-        let table = [("key: foo", 3), ("key: [1]", 1), ("key: {}", 1), ("key: ]", 1)];
+    fn unknown_words_and_stray_closers_are_invalid_values() {
+        let table = [("key: foo", 3), ("key: ]", 1), ("key: }", 1), ("key: ,", 1)];
         for (text, length) in table {
             assert_eq!(
                 failure(text),
@@ -236,6 +282,18 @@ mod tests {
         assert_eq!(
             failure("key 007"),
             (SyntaxError::UnexpectedLeadingZero, Span::new(1, 5, 3))
+        );
+    }
+
+    #[test]
+    fn errors_inside_a_collection_pass_through() {
+        assert_eq!(
+            failure("a: [1 2]"),
+            (SyntaxError::MissingArrayComma, Span::new_point(1, 6))
+        );
+        assert_eq!(
+            failure("a: { b }"),
+            (SyntaxError::MissingColon, Span::new_point(1, 7))
         );
     }
 
